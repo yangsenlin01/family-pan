@@ -29,6 +29,6 @@ sa-token:
   active-timeout: 1800
   is-concurrent: true
   is-share: true
-  token-style: jwt
+  token-style: uuid
   is-log: false
   jwt-secret-key: ${SA_TOKEN_JWT_SECRET_KEY:homecloud-jwt-secret-key-change-in-production}
