@@ -1,4 +1,4 @@
-# 家庭云盘 — 整体规划方案 v1.2
+# 家庭云盘 — 整体规划方案 v1.3
 
 ---
 
@@ -159,27 +159,38 @@ Phase 1 — 核心 MVP
 │   sys_user   │       │    file_info     │       │   file_chunk      │
 ├──────────────┤       ├──────────────────┤       ├───────────────────┤
 │ id (PK)      │──┐    │ id (PK)          │       │ id (PK)           │
-│ username     │  │    │ user_id (FK)     │──┐    │ file_md5          │
-│ password     │  │    │ parent_id (自关联)│  │    │ chunk_index       │
-│ nickname     │  │    │ file_name        │  │    │ chunk_md5         │
-│ avatar       │  │    │ file_type        │  │    │ chunk_size        │
-│ storage_used │  │    │ file_size        │  │    │ storage_path      │
-│ storage_limit│  │    │ file_md5         │──┼──→ │ created_at        │
-│ status       │  │    │ mime_type        │  │    └───────────────────┘
-│ created_at   │  │    │ is_dir           │  │
-│ updated_at   │  │    │ storage_path     │  │    ┌───────────────────┐
-└──────────────┘  │    │ thumbnail_200    │  │    │   upload_task     │
-                  │    │ thumbnail_800    │  │    ├───────────────────┤
+│ username     │  │    │ user_id (FK)     │──┐    │ task_id (FK)      │
+│ password     │  │    │ parent_id (自关联)│  │    │ file_md5          │
+│ nickname     │  │    │ file_name        │  │    │ chunk_index       │
+│ avatar       │  │    │ file_type        │  │    │ chunk_md5         │
+│ storage_used │  │    │ file_size        │  │    │ chunk_size        │
+│ storage_limit│  │    │ file_md5         │──┼──→ │ storage_path      │
+│ status       │  │    │ mime_type        │  │    │ created_at        │
+│ created_at   │  │    │ is_dir           │  │    └───────────────────┘
+│ updated_at   │  │    │ storage_path     │  │
+└──────────────┘  │    │ thumbnail_200    │  │    ┌───────────────────┐
+                  │    │ thumbnail_800    │  │    │   upload_task     │
+                  │    │ thumbnail_status │  │    ├───────────────────┤
                   │    │ cover_time       │  │    │ id (PK)           │
-                  │    │ width            │  │    │ user_id (FK)      │
-                  │    │ height           │  │    │ file_md5          │
-                  │    │ duration         │  │    │ file_name         │
-                  │    │ is_deleted       │  │    │ file_size         │
-                  │    │ created_at       │  │    │ total_chunks      │
-                  │    │ updated_at       │  │    │ uploaded_chunks   │
-                  │    └──────────────────┘  │    │ status            │
-                  │                          │    │ created_at        │
-                  └──────────────────────────┘    └───────────────────┘
+                  │    │ date_taken       │  │    │ user_id (FK)      │
+                  │    │ width            │  │    │ file_md5          │
+                  │    │ height           │  │    │ file_name         │
+                  │    │ duration         │  │    │ file_size         │
+                  │    │ is_deleted       │  │    │ total_chunks      │
+                  │    │ created_at       │  │    │ uploaded_chunks   │
+                  │    │ updated_at       │  │    │ status            │
+                  │    └──────────────────┘  │    │ created_at        │
+                  │                          │    └───────────────────┘
+                  │    ┌──────────────────┐  │
+                  │    │    audit_log     │  │
+                  │    ├──────────────────┤  │
+                  │    │ id (PK)          │  │
+                  │    │ user_id (FK) ────┼──┘
+                  │    │ action           │
+                  │    │ target           │
+                  │    │ ip               │
+                  │    │ created_at       │
+                  │    └──────────────────┘
 ```
 
 ### 4.2 表结构说明
@@ -275,20 +286,19 @@ created_at      DATETIME
 ### 5.1 通用约定
 
 ```
-API 路由规则: /api/{version}/{channel}/{resource}
+API 路由规则: /api/{version}/[{channel}/]{resource}
 
   version  — API 版本号: v1, v2, ...
-  channel  — 调用端标识:
-    /api/v1/app/    移动端 App（app-api）
-    /api/v1/admin/  PC 管理端（admin-api）
-    /api/v1/open/   开放接口（open-api，供第三方集成，Phase 2+）
-    /api/v1/        通用接口（auth 等无需区分 channel，直接挂在版本号下）
+  channel  — 可选，仅客户端特有功能需要:
+    /api/v1/admin/  PC 管理端专用（admin-api：用户管理、系统统计等，Phase 2+）
+    /api/v1/app/    移动端专用（app-api：OTA 版本检查、推送注册等）
+    /api/v1/open/   开放接口（open-api：供第三方集成，Phase 2+）
+    无 channel      通用接口（auth、文件 CRUD、照片浏览等 PC/移动端共用逻辑）
 
-  channel 之间的区别:
-    - app-api:   面向移动端，响应精简，接口按移动端交互设计
-    - admin-api: 面向 PC 管理端，可能返回更全的字段、支持批量操作
-    - open-api:  对外暴露，需独立鉴权（API Key/OAuth），限流更严格
-    - 通用接口:  认证（login/register/refresh/logout）不区分 channel
+  判断标准:
+    - PC 端和移动端都调同一个接口 → 不加 channel（/api/v1/files/...）
+    - 仅某一端使用，或两端请求/响应差异大 → 加 channel
+    - 通用接口:  认证（login/register/refresh/logout）、文件操作、照片浏览
 
 统一响应格式:
 {
@@ -325,41 +335,47 @@ API 路由规则: /api/{version}/{channel}/{resource}
 | POST | /api/v1/auth/logout | 登出 |
 | PUT | /api/v1/auth/password | 修改密码 |
 
-**文件模块 — app-api（移动端 + PC 个人文件管理）**
+**文件模块（通用，PC / 移动端共用）**
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/v1/app/files/upload | 小文件上传（multipart/form-data） |
-| POST | /api/v1/app/files/upload/check | 秒传检查（MD5 查询） |
-| POST | /api/v1/app/files/upload/chunk | 分片上传初始化 + 上传分片 |
-| GET  | /api/v1/app/files/upload/progress | 查询分片上传进度 |
-| POST | /api/v1/app/files/upload/merge | 分片合并 |
-| GET | /api/v1/app/files/download/{id} | 下载文件 |
-| GET | /api/v1/app/files/list | 文件列表（分页） |
-| GET | /api/v1/app/files/detail/{id} | 文件详情 |
-| DELETE | /api/v1/app/files/{id} | 删除文件（软删除） |
-| PUT | /api/v1/app/files/{id}/rename | 重命名 |
-| PUT | /api/v1/app/files/{id}/move | 移动文件 |
-| PUT | /api/v1/app/files/{id}/copy | 复制文件 |
-| POST | /api/v1/app/files/folder | 创建文件夹 |
-| GET | /api/v1/app/files/thumbnail/{id} | 获取缩略图 |
-| GET | /api/v1/app/files/stream/{id} | 视频流（支持 Range） |
+| POST | /api/v1/files/upload | 小文件上传（multipart/form-data） |
+| POST | /api/v1/files/upload/check | 秒传检查（MD5 查询） |
+| POST | /api/v1/files/upload/chunk | 分片上传初始化 + 上传分片 |
+| GET  | /api/v1/files/upload/progress | 查询分片上传进度 |
+| POST | /api/v1/files/upload/merge | 分片合并 |
+| GET | /api/v1/files/download/{id} | 下载文件 |
+| GET | /api/v1/files/list | 文件列表（分页） |
+| GET | /api/v1/files/detail/{id} | 文件详情 |
+| DELETE | /api/v1/files/{id} | 删除文件（软删除） |
+| PUT | /api/v1/files/{id}/rename | 重命名 |
+| PUT | /api/v1/files/{id}/move | 移动文件 |
+| PUT | /api/v1/files/{id}/copy | 复制文件 |
+| POST | /api/v1/files/folder | 创建文件夹 |
+| GET | /api/v1/files/thumbnail/{id} | 获取缩略图 |
+| GET | /api/v1/files/stream/{id} | 视频流（支持 Range） |
 
-**照片模块 — app-api**
+**照片模块（通用，PC / 移动端共用）**
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | /api/v1/app/photos/timeline | 时间线列表（按月分组） |
-| GET | /api/v1/app/photos/list | 照片列表（支持类型过滤） |
+| GET | /api/v1/photos/timeline | 时间线列表（按月分组） |
+| GET | /api/v1/photos/list | 照片列表（支持类型过滤） |
 
-**管理端 — admin-api（Phase 2+，预留路径结构）**
+**移动端专用 — app-api**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/v1/app/version/check | OTA 版本检查，返回最新版本号和下载 URL（Phase 1） |
+
+**管理端 — admin-api（Phase 2+，预留）**
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | /api/v1/admin/users | 用户管理（Phase 2） |
 | GET | /api/v1/admin/stats | 系统统计（Phase 2） |
 
-**开放接口 — open-api（Phase 2+，预留路径结构）**
+**开放接口 — open-api（Phase 2+，预留）**
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -696,7 +712,7 @@ OTA 更新流程 (capacitor-updater):
 版本策略:
   - Web 资源版本: 跟随应用版本号，每次发版自动构建
   - APK 原生版本: 仅 Capacitor 插件或原生配置变更时重新打包
-  - OTA 更新地址: /api/v1/app/version/check（返回最新版本号和下载 URL）
+  - OTA 版本检查接口: GET /api/v1/app/version/check（返回最新版本号和下载 URL）
 ```
 
 ### 7.5 代码仓库
@@ -719,7 +735,7 @@ OTA 更新流程 (capacitor-updater):
 Step 1 — 脚手架搭建
   ├── 后端：Maven 多模块空项目，能编译通过
   ├── 前端：Vite + Vue3 空项目，能启动
-  └── 本地 MySQL/Redis/MinIO 安装并连通
+  └── 本地 MySQL/Redis/MinIO 安装并连通（Docker Compose）
 
 Step 2 — 后端基础设施
   ├── cloud-common: Result<T>、BusinessException、GlobalExceptionHandler、ErrorCode
@@ -732,14 +748,21 @@ Step 3 — 文件存储核心
   └── 缩略图生成（异步）
 
 Step 4 — 前端框架搭建
-  ├── 布局切换（DesktopLayout / MobileLayout）
+  ├── 布局切换骨架（DesktopLayout / MobileLayout，移动端先占位）
   ├── 路由 + Pinia + Axios 封装
-  └── 登录/注册页面
+  └── 登录/注册页面（PC 端先完成）
 
-Step 5 — 串联第一个完整功能
-  ├── PC 端：文件管理页 + 照片时间线
-  ├── 移动端：照片浏览 + 文件列表
-  └── 端到端跑通：上传 → 缩略图 → 浏览 → 预览
+Step 5a — PC 端完整功能
+  ├── 文件管理页（FileTable + UploadDrawer）
+  ├── 照片时间线 + PhotoViewer
+  └── 存储统计 + 个人设置
+  └── 验证：端到端跑通 上传 → 缩略图 → 浏览 → 预览（PC Web）
+
+Step 5b — 移动端适配 + APK 打包
+  ├── 移动端视图（Vant 4 组件替换 PC 组件）
+  ├── 移动端特有功能（照片压缩上传选项）
+  ├── Capacitor 集成 + capacitor-updater OTA 配置
+  └── APK/AAB 打包构建脚本
 ```
 
 ---
@@ -758,7 +781,7 @@ Step 5 — 串联第一个完整功能
 
 ---
 
-*文档版本: v1.2 | 日期: 2026-06-09 | 状态: 待确认*
+*文档版本: v1.3 | 日期: 2026-06-09 | 状态: 待确认*
 
 ---
 
@@ -868,6 +891,7 @@ Step 5 — 串联第一个完整功能
 POST /api/v1/files/upload/check       — 秒传检查
 GET  /api/v1/files/upload/progress    — 分片上传进度查询
 GET  /api/v1/common/health            — 健康检查
+GET  /api/v1/app/version/check        — OTA 版本检查
 ```
 
 ### 11.3 新增字段
