@@ -1,7 +1,18 @@
 <template>
   <div class="side-menu">
     <div class="logo">家庭云盘</div>
-    <n-menu :value="currentRoute" :options="menuOptions" @update:value="navigate" />
+    <div class="menu-items">
+      <div
+        v-for="item in menuItems"
+        :key="item.key"
+        class="menu-item"
+        :class="{ active: currentRoute === item.key }"
+        @click="navigate(item.key)"
+      >
+        <n-icon size="20"><component :is="item.icon" /></n-icon>
+        <span class="item-label">{{ item.label }}</span>
+      </div>
+    </div>
     <div class="user-section">
       <n-dropdown :options="userOptions" @select="handleUserAction">
         <div class="user-info">
@@ -14,27 +25,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/stores/user";
-import type { Component } from "vue";
-import { NIcon } from "naive-ui";
 import { ImageOutline, FolderOutline, SettingsOutline } from "@vicons/ionicons5";
 
 const router = useRouter();
 const userStore = useUserStore();
 
-function renderIcon(icon: Component) {
-  return () => h(NIcon, null, { default: () => h(icon) });
-}
-
-const menuOptions = [
-  { label: "照片", key: "desktop-photos", icon: renderIcon(ImageOutline) },
-  { label: "文件", key: "desktop-files", icon: renderIcon(FolderOutline) },
-  { label: "设置", key: "desktop-settings", icon: renderIcon(SettingsOutline) },
+const menuItems = [
+  { label: "照片", key: "desktop-photos", icon: ImageOutline },
+  { label: "文件", key: "desktop-files", icon: FolderOutline },
+  { label: "设置", key: "desktop-settings", icon: SettingsOutline },
 ];
 
-const currentRoute = computed(() => router.currentRoute.value.name as string);
+const currentRoute = computed(() => router.currentRoute.value.name);
 
 const userOptions = [
   { label: "修改密码", key: "password" },
@@ -67,6 +72,34 @@ function handleUserAction(key: string) {
   font-weight: bold;
   color: var(--n-text-color);
   text-align: center;
+  border-bottom: 1px solid var(--n-border-color);
+}
+.menu-items {
+  flex: 0;
+  padding: 8px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--n-text-color-2);
+  transition: all 0.2s;
+  margin-bottom: 2px;
+}
+.menu-item:hover {
+  background: var(--n-color-hover);
+  color: var(--n-text-color);
+}
+.menu-item.active {
+  background: var(--n-color-target);
+  color: var(--n-color-targeted);
+  font-weight: 500;
+}
+.item-label {
+  font-size: 14px;
 }
 .user-section {
   margin-top: auto;

@@ -44,50 +44,47 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() == 0) {
             throw new BusinessException(ErrorCode.USER_DISABLED);
         }
-        // Issue access token (short-lived, 15 min)
+        // Issue token (JWT, 2-hour timeout with 30-min sliding renewal)
         StpUtil.login(user.getId());
-        String accessToken = StpUtil.getTokenValue();
-
-        // Issue refresh token (long-lived, same as access but validated differently)
-        StpUtil.login(user.getId());
-        String refreshToken = StpUtil.getTokenValue();
+        String token = StpUtil.getTokenValue();
 
         UserInfo userInfo = UserInfo.builder()
                 .id(user.getId()).username(user.getUsername())
                 .nickname(user.getNickname()).avatar(user.getAvatar())
                 .build();
         return TokenResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .expiresIn(900)
+                .accessToken(token)
+                .refreshToken(token)
+                .expiresIn(7200)
                 .userInfo(userInfo)
                 .build();
     }
 
     @Override
     public TokenResponse refresh(String refreshToken) {
-        // Parse the refresh token without requiring the current request to be authenticated
         Object loginId = StpUtil.getLoginIdByToken(refreshToken);
         if (loginId == null) {
             throw new BusinessException(ErrorCode.TOKEN_EXPIRED);
         }
         Long userId = Long.parseLong(loginId.toString());
 
-        // Issue new tokens (rotate both access and refresh)
-        StpUtil.login(userId);
-        String newAccessToken = StpUtil.getTokenValue();
-        StpUtil.login(userId);
-        String newRefreshToken = StpUtil.getTokenValue();
-
         SysUser user = sysUserMapper.selectById(userId);
+        if (user == null || user.getStatus() == 0) {
+            throw new BusinessException(ErrorCode.USER_DISABLED);
+        }
+
+        // Re-issue token (extends session)
+        StpUtil.login(userId);
+        String newToken = StpUtil.getTokenValue();
+
         UserInfo userInfo = UserInfo.builder()
                 .id(user.getId()).username(user.getUsername())
                 .nickname(user.getNickname()).avatar(user.getAvatar())
                 .build();
         return TokenResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .expiresIn(900)
+                .accessToken(newToken)
+                .refreshToken(newToken)
+                .expiresIn(7200)
                 .userInfo(userInfo)
                 .build();
     }

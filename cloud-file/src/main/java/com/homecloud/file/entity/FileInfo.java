@@ -18,7 +18,9 @@ public class FileInfo {
     private String mimeType;
     private Integer isDir;
     private String storagePath;
+    @TableField("thumbnail_200")
     private String thumbnail200;
+    @TableField("thumbnail_800")
     private String thumbnail800;
     private Integer thumbnailStatus;
     private String coverTime;

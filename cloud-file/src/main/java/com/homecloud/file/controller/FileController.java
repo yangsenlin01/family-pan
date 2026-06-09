@@ -8,7 +8,7 @@ import com.homecloud.common.exception.BusinessException;
 import com.homecloud.common.result.Result;
 import com.homecloud.file.entity.FileInfo;
 import com.homecloud.file.mapper.FileInfoMapper;
-import com.homecloud.file.mapper.SysUserMapper;
+import com.homecloud.file.mapper.SysUserStorageMapper;
 import com.homecloud.file.storage.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -33,7 +33,7 @@ public class FileController {
 
     private final StorageService storageService;
     private final FileInfoMapper fileInfoMapper;
-    private final SysUserMapper sysUserMapper;
+    private final SysUserStorageMapper sysUserStorageMapper;
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
         "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif",
@@ -58,7 +58,7 @@ public class FileController {
         }
 
         // Storage limit check: atomic update with overflow guard
-        int updated = sysUserMapper.checkAndIncrementStorage(userId, fileSize);
+        int updated = sysUserStorageMapper.checkAndIncrementStorage(userId, fileSize);
         if (updated == 0) {
             throw new BusinessException(ErrorCode.STORAGE_FULL);
         }
@@ -66,14 +66,12 @@ public class FileController {
         String fileName = resolveFileName(userId, parentId, originalName);
         String fileType = categorizeFile(ext.toLowerCase());
 
-        byte[] bytes;
+        // Calculate MD5 via streaming (avoids OOM on large files)
         String md5;
-        try {
-            bytes = file.getBytes();
-            md5 = calculateMD5(bytes);
+        try (InputStream is = file.getInputStream()) {
+            md5 = calculateMD5Stream(is);
         } catch (Exception e) {
-            // Rollback storage increment
-            sysUserMapper.decrementStorage(userId, fileSize);
+            sysUserStorageMapper.decrementStorage(userId, fileSize);
             throw new BusinessException(ErrorCode.UPLOAD_FAILED);
         }
 
@@ -94,18 +92,17 @@ public class FileController {
             ));
         }
 
-        // Upload to MinIO
+        // Upload to MinIO (streaming from temp file, no memory pressure)
         String objectName = userId + "/" + UUID.randomUUID() + "." + ext;
-        try {
-            storageService.upload(objectName, new java.io.ByteArrayInputStream(bytes),
-                    fileSize, file.getContentType());
+        try (InputStream is = file.getInputStream()) {
+            storageService.upload(objectName, is, fileSize, file.getContentType());
         } catch (Exception e) {
             log.error("MinIO upload failed", e);
-            sysUserMapper.decrementStorage(userId, fileSize);
+            sysUserStorageMapper.decrementStorage(userId, fileSize);
             throw new BusinessException(ErrorCode.UPLOAD_FAILED);
         }
 
-        // Save file_info record (wrapped in @Transactional, so rollback on failure)
+        // Save file_info record
         FileInfo fileInfo = buildFileInfo(userId, parentId, fileName, fileType,
                 fileSize, md5, file.getContentType(), objectName);
         try {
@@ -113,7 +110,7 @@ public class FileController {
         } catch (Exception e) {
             log.error("DB insert failed, cleaning up MinIO object: {}", objectName, e);
             storageService.delete(objectName);
-            sysUserMapper.decrementStorage(userId, fileSize);
+            sysUserStorageMapper.decrementStorage(userId, fileSize);
             throw new BusinessException(ErrorCode.UPLOAD_FAILED);
         }
 
@@ -217,24 +214,25 @@ public class FileController {
         }
         if (fileInfo.getIsDir() == 1) {
             deleteRecursive(userId, id);
+        } else if (fileInfo.getStoragePath() != null) {
+            storageService.delete(fileInfo.getStoragePath());
         }
-        fileInfo.setIsDeleted(1);
-        fileInfoMapper.updateById(fileInfo);
+        fileInfoMapper.deleteById(fileInfo.getId());
         return Result.ok();
     }
 
     private void deleteRecursive(Long userId, Long parentId) {
         LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FileInfo::getUserId, userId)
-               .eq(FileInfo::getParentId, parentId)
-               .eq(FileInfo::getIsDeleted, 0);
+               .eq(FileInfo::getParentId, parentId);
         var children = fileInfoMapper.selectList(wrapper);
         for (FileInfo child : children) {
             if (child.getIsDir() == 1) {
                 deleteRecursive(userId, child.getId());
+            } else if (child.getStoragePath() != null) {
+                storageService.delete(child.getStoragePath());
             }
-            child.setIsDeleted(1);
-            fileInfoMapper.updateById(child);
+            fileInfoMapper.deleteById(child.getId());
         }
     }
 
@@ -328,9 +326,14 @@ public class FileController {
         };
     }
 
-    private String calculateMD5(byte[] bytes) throws Exception {
+    private String calculateMD5Stream(InputStream is) throws Exception {
         MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] digest = md.digest(bytes);
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = is.read(buffer)) != -1) {
+            md.update(buffer, 0, read);
+        }
+        byte[] digest = md.digest();
         StringBuilder sb = new StringBuilder();
         for (byte b : digest) sb.append(String.format("%02x", b));
         return sb.toString();

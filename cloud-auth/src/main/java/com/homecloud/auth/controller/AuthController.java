@@ -28,7 +28,8 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public Result<TokenResponse> refresh(@RequestHeader("Authorization") String token) {
-        return Result.ok(authService.refresh(token));
+        String rawToken = token.startsWith("Bearer ") ? token.substring(7) : token;
+        return Result.ok(authService.refresh(rawToken));
     }
 
     @PostMapping("/logout")

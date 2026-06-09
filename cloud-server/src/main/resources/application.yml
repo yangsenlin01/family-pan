@@ -25,10 +25,10 @@ mybatis-plus:
 
 sa-token:
   token-name: Authorization
-  timeout: 900
-  active-timeout: -1
+  timeout: 7200
+  active-timeout: 1800
   is-concurrent: true
-  is-share: false
-  token-style: simple-uuid
+  is-share: true
+  token-style: jwt
   is-log: false
-  jwt-secret-key: homecloud-jwt-secret-key-change-in-production
+  jwt-secret-key: ${JWT_SECRET_KEY:homecloud-jwt-secret-key-change-in-production}

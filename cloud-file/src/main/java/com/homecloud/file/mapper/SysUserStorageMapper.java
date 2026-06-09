@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
-public interface SysUserMapper extends BaseMapper<SysUserStorage> {
+public interface SysUserStorageMapper extends BaseMapper<SysUserStorage> {
 
     @Update("UPDATE sys_user SET storage_used = storage_used + #{size} WHERE id = #{userId} AND storage_used + #{size} <= storage_limit AND status = 1")
     int checkAndIncrementStorage(@Param("userId") Long userId, @Param("size") long size);

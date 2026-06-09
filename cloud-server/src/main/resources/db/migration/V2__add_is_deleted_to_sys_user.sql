@@ -1,0 +1,1 @@
+ALTER TABLE sys_user ADD COLUMN is_deleted TINYINT DEFAULT 0 COMMENT '0正常 1已删除' AFTER status;

@@ -4,17 +4,28 @@
 
 <script setup lang="ts">
 import { h } from "vue";
-import { NButton } from "naive-ui";
+import { NButton, NPopconfirm } from "naive-ui";
 import FileIcon from "@/components/common/FileIcon.vue";
 
 const props = defineProps<{ files: any[]; loading: boolean }>();
 const emit = defineEmits(["delete", "click"]);
 
+function handleClick(row: any) {
+  emit("click", row);
+}
+
+function handleDelete(row: any) {
+  emit("delete", row.id);
+}
+
 const columns = [
   {
     title: "名称", key: "fileName",
     render(row: any) {
-      return h("div", { style: "display:flex;align-items:center;gap:8px;cursor:pointer", onClick: () => emit("click", row) }, [
+      return h("div", {
+        style: "display:flex;align-items:center;gap:8px;cursor:pointer",
+        onClick: () => handleClick(row)
+      }, [
         h(FileIcon, { fileType: row.fileType, isDir: row.isDir }),
         row.fileName,
       ]);
@@ -26,9 +37,10 @@ const columns = [
   {
     title: "操作", key: "actions",
     render(row: any) {
-      return h("div", { style: "display:flex;gap:8px" }, [
-        h(NButton, { size: "small", onClick: () => emit("delete", row.id) }, { default: () => "删除" }),
-      ]);
+      return h(NPopconfirm, { onPositiveClick: () => handleDelete(row) }, {
+        default: () => "确认删除？",
+        trigger: () => h(NButton, { size: "small", type: "error" }, { default: () => "删除" }),
+      });
     },
   },
 ];

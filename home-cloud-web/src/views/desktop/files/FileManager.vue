@@ -8,8 +8,12 @@
     <FileTable :files="fileStore.files" :loading="fileStore.loading" @delete="onDelete" @click="onFileClick" />
     <n-pagination v-model:page="page" :item-count="fileStore.total" :page-size="30" @update:page="onPageChange" />
 
-    <n-modal v-model:show="showUpload" title="上传文件">
-      <n-upload multiple :action="uploadUrl" :headers="uploadHeaders" :max-size="100 * 1024 * 1024" @finish="onUploadFinish" />
+    <n-modal v-model:show="showUpload" title="上传文件" preset="card" style="width:500px">
+      <n-upload multiple :action="uploadUrl" :headers="uploadHeaders" :max-size="100 * 1024 * 1024" :data="{ parentId: fileStore.currentParentId }"
+        @finish="onUploadFinish"
+        @error="onUploadError">
+        <n-button>选择文件</n-button>
+      </n-upload>
     </n-modal>
     <n-modal v-model:show="showCreateFolder" title="新建文件夹">
       <n-space vertical>
@@ -21,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useFileStore } from "@/stores/file";
 import { useUserStore } from "@/stores/user";
 import FileTable from "@/components/desktop/FileTable.vue";
@@ -35,7 +39,7 @@ const page = ref(1);
 const filterType = ref<string | null>(null);
 
 const uploadUrl = "/api/v1/files/upload";
-const uploadHeaders = { Authorization: userStore.accessToken };
+const uploadHeaders = computed(() => ({ Authorization: userStore.accessToken }));
 
 const typeOptions = [
   { label: "全部", value: null },
@@ -60,6 +64,20 @@ function onPageChange(p: number) {
 function onUploadFinish() {
   fileStore.fetchFiles(fileStore.currentParentId);
   showUpload.value = false;
+}
+function onUploadError({ file, event }: any) {
+  console.error("Upload failed:", file?.name, event);
+  // Try to extract error message from response
+  if (event?.target?.response) {
+    try {
+      const r = JSON.parse(event.target.response);
+      alert("上传失败: " + (r.message || "未知错误"));
+    } catch {
+      alert("上传失败: " + file?.name);
+    }
+  } else {
+    alert("上传失败: " + (file?.name || "未知错误"));
+  }
 }
 async function onCreateFolder() {
   if (newFolderName.value.trim()) {

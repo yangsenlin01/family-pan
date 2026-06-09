@@ -8,11 +8,14 @@ interface UserInfo {
 }
 
 export const useUserStore = defineStore("user", {
-  state: () => ({
-    accessToken: localStorage.getItem("accessToken") || "",
-    refreshToken: localStorage.getItem("refreshToken") || "",
-    userInfo: null as UserInfo | null,
-  }),
+  state: () => {
+    const savedInfo = localStorage.getItem("userInfo");
+    return {
+      accessToken: localStorage.getItem("accessToken") || "",
+      refreshToken: localStorage.getItem("refreshToken") || "",
+      userInfo: savedInfo ? JSON.parse(savedInfo) : (null as UserInfo | null),
+    };
+  },
   getters: {
     isLoggedIn: (state) => !!state.accessToken,
   },
@@ -25,6 +28,7 @@ export const useUserStore = defineStore("user", {
     },
     setUserInfo(userInfo: UserInfo) {
       this.userInfo = userInfo;
+      localStorage.setItem("userInfo", JSON.stringify(userInfo));
     },
     logout() {
       this.accessToken = "";
@@ -32,6 +36,7 @@ export const useUserStore = defineStore("user", {
       this.userInfo = null;
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      localStorage.removeItem("userInfo");
     },
   },
 });

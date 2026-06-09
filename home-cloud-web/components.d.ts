@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     FileIcon: typeof import('./src/components/common/FileIcon.vue')['default']
     FileTable: typeof import('./src/components/desktop/FileTable.vue')['default']
+    MessageSetup: typeof import('./src/components/common/MessageSetup.vue')['default']
     NAvatar: typeof import('naive-ui')['NAvatar']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
@@ -27,7 +28,6 @@ declare module 'vue' {
     NLayoutContent: typeof import('naive-ui')['NLayoutContent']
     NLayoutSider: typeof import('naive-ui')['NLayoutSider']
     NLoadingBarProvider: typeof import('naive-ui')['NLoadingBarProvider']
-    NMenu: typeof import('naive-ui')['NMenu']
     NMessageProvider: typeof import('naive-ui')['NMessageProvider']
     NModal: typeof import('naive-ui')['NModal']
     NPagination: typeof import('naive-ui')['NPagination']

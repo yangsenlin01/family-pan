@@ -14,9 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RateLimitFilter implements Filter {
 
-    private static final int MAX_ATTEMPTS = 5;
-    private static final long WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-    private static final long BLOCK_MS = 15 * 60 * 1000; // 15 minute block
+    private static final int MAX_ATTEMPTS = 20;
+    private static final long WINDOW_MS = 60 * 1000; // 1 minute
+    private static final long BLOCK_MS = 5 * 60 * 1000; // 5 minute block
 
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
 
