@@ -2,6 +2,7 @@ package com.homecloud.file.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.homecloud.common.constant.ErrorCode;
 import com.homecloud.common.exception.BusinessException;
 import com.homecloud.common.result.Result;
@@ -159,5 +160,168 @@ public class FileController {
         fi.setCreatedAt(LocalDateTime.now());
         fi.setUpdatedAt(LocalDateTime.now());
         return fi;
+    }
+
+    @GetMapping("/download/{id}")
+    public void download(@PathVariable Long id, HttpServletResponse response) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)
+                || fileInfo.getIsDeleted() == 1 || fileInfo.getIsDir() == 1) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        response.setContentType(fileInfo.getMimeType() != null ? fileInfo.getMimeType() : "application/octet-stream");
+        response.setHeader("Content-Disposition",
+                "attachment; filename=\"" + URLEncoder.encode(fileInfo.getFileName(), StandardCharsets.UTF_8).replace("+", "%20") + "\"");
+        try (InputStream is = storageService.download(fileInfo.getStoragePath());
+             OutputStream os = response.getOutputStream()) {
+            is.transferTo(os);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+    }
+
+    @GetMapping("/stream/{id}")
+    public void stream(@PathVariable Long id, HttpServletResponse response) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)
+                || fileInfo.getIsDeleted() == 1) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        response.setContentType(fileInfo.getMimeType() != null ? fileInfo.getMimeType() : "application/octet-stream");
+        response.setHeader("Accept-Ranges", "bytes");
+        try (InputStream is = storageService.download(fileInfo.getStoragePath());
+             OutputStream os = response.getOutputStream()) {
+            is.transferTo(os);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+    }
+
+    @GetMapping("/list")
+    public Result<Map<String, Object>> list(
+            @RequestParam(defaultValue = "0") Long parentId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "30") int size,
+            @RequestParam(required = false) String type) {
+
+        Long userId = StpUtil.getLoginIdAsLong();
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+               .eq(FileInfo::getParentId, parentId)
+               .eq(FileInfo::getIsDeleted, 0);
+        if (type != null && !type.isEmpty()) {
+            wrapper.eq(FileInfo::getFileType, type);
+        }
+        wrapper.orderByDesc(FileInfo::getIsDir)
+               .orderByDesc(FileInfo::getCreatedAt);
+
+        Page<FileInfo> mpPage = new Page<>(page, size);
+        Page<FileInfo> result = fileInfoMapper.selectPage(mpPage, wrapper);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("total", result.getTotal());
+        data.put("page", page);
+        data.put("size", size);
+        data.put("list", result.getRecords());
+        return Result.ok(data);
+    }
+
+    @GetMapping("/detail/{id}")
+    public Result<FileInfo> detail(@PathVariable Long id) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)
+                || fileInfo.getIsDeleted() == 1) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        return Result.ok(fileInfo);
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        if (fileInfo.getIsDir() == 1) {
+            deleteRecursive(userId, id);
+        }
+        fileInfo.setIsDeleted(1);
+        fileInfoMapper.updateById(fileInfo);
+        return Result.ok();
+    }
+
+    private void deleteRecursive(Long userId, Long parentId) {
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+               .eq(FileInfo::getParentId, parentId)
+               .eq(FileInfo::getIsDeleted, 0);
+        var children = fileInfoMapper.selectList(wrapper);
+        for (FileInfo child : children) {
+            if (child.getIsDir() == 1) {
+                deleteRecursive(userId, child.getId());
+            }
+            child.setIsDeleted(1);
+            fileInfoMapper.updateById(child);
+        }
+    }
+
+    @PutMapping("/{id}/rename")
+    public Result<Void> rename(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)
+                || fileInfo.getIsDeleted() == 1) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        fileInfo.setFileName(body.get("fileName"));
+        fileInfoMapper.updateById(fileInfo);
+        return Result.ok();
+    }
+
+    @PostMapping("/folder")
+    public Result<Map<String, Object>> createFolder(@RequestBody Map<String, Object> body) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Long parentId = Long.valueOf(body.getOrDefault("parentId", 0).toString());
+        String folderName = body.get("folderName").toString();
+
+        FileInfo folder = new FileInfo();
+        folder.setUserId(userId);
+        folder.setParentId(parentId);
+        folder.setFileName(folderName);
+        folder.setIsDir(1);
+        folder.setIsDeleted(0);
+        folder.setCreatedAt(LocalDateTime.now());
+        folder.setUpdatedAt(LocalDateTime.now());
+        fileInfoMapper.insert(folder);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", folder.getId());
+        result.put("folderName", folderName);
+        return Result.ok(result);
+    }
+
+    @GetMapping("/thumbnail/{id}")
+    public void thumbnail(@PathVariable Long id, @RequestParam(defaultValue = "200") int size,
+            HttpServletResponse response) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        FileInfo fileInfo = fileInfoMapper.selectById(id);
+        if (fileInfo == null || !fileInfo.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        String thumbPath = size <= 200 ? fileInfo.getThumbnail200() : fileInfo.getThumbnail800();
+        if (thumbPath == null) {
+            thumbPath = fileInfo.getStoragePath();
+        }
+        try (InputStream is = storageService.download(thumbPath);
+             OutputStream os = response.getOutputStream()) {
+            response.setContentType("image/jpeg");
+            is.transferTo(os);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
     }
 }
