@@ -26,6 +26,9 @@ Thumbs.db
 .env.local
 *.log
 
+# Local dev config (contains real credentials)
+application-local.yml
+
 # Capacitor
 android/
 ios/

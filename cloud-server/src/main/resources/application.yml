@@ -31,4 +31,4 @@ sa-token:
   is-share: true
   token-style: jwt
   is-log: false
-  jwt-secret-key: ${JWT_SECRET_KEY:homecloud-jwt-secret-key-change-in-production}
+  jwt-secret-key: ${SA_TOKEN_JWT_SECRET_KEY:homecloud-jwt-secret-key-change-in-production}
