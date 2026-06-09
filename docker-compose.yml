@@ -19,13 +19,14 @@ services:
     image: redis:7-alpine
     container_name: homecloud-redis
     restart: unless-stopped
+    command: redis-server --requirepass redis123
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-03-12T18-04-18Z
     container_name: homecloud-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"

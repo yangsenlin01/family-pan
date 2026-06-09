@@ -49,6 +49,8 @@ function handleUserAction(key: string) {
   if (key === "logout") {
     userStore.logout();
     router.push("/login");
+  } else if (key === "password") {
+    router.push({ name: "desktop-settings" });
   }
 }
 </script>

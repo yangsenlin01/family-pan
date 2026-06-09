@@ -9,7 +9,7 @@
     <n-pagination v-model:page="page" :item-count="fileStore.total" :page-size="30" @update:page="onPageChange" />
 
     <n-modal v-model:show="showUpload" title="上传文件">
-      <n-upload multiple :action="uploadUrl" :headers="uploadHeaders" @finish="onUploadFinish" />
+      <n-upload multiple :action="uploadUrl" :headers="uploadHeaders" :max-size="100 * 1024 * 1024" @finish="onUploadFinish" />
     </n-modal>
     <n-modal v-model:show="showCreateFolder" title="新建文件夹">
       <n-space vertical>
