@@ -702,7 +702,7 @@ OTA 更新流程 (capacitor-updater):
 ### 7.5 代码仓库
 
 ```
-远程仓库: GitHub（待创建）
+远程仓库: https://github.com/yangsenlin01/family-pan
 仓库名:   family-pan（或 home-cloud）
 结构:
   ├── cloud-server/     — 后端 Maven 多模块（Java 21）
